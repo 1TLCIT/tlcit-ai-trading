@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -19,16 +20,16 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: tlcit-engine
 
       - name: Build & Push Docker Image
         run: |
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/tlcit-engine
+          gcloud builds submit --tag gcr.io/tlcit-engine/tlcit-engine
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy tlcit-engine \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/tlcit-engine \
+            --image gcr.io/tlcit-engine/tlcit-engine \
             --platform managed \
             --region us-central1 \
             --allow-unauthenticated
