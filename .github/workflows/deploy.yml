@@ -1,3 +1,4 @@
+🚀 Re-trigger deploy after fixing requirements
 name: Deploy to Google Cloud Run
 
 on:
