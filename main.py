@@ -1,4 +1,5 @@
 # TLCIT Engine: Dual Integration Build (FastAPI + QuantConnect + Backtrader + Alerts + Storage + Google Chat)
+# 🔁 Re-trigger deploy after enabling Cloud Resource Manager API
 
 # --- FastAPI Core ---
 from fastapi import FastAPI, Request
@@ -97,6 +98,7 @@ def get_portfolio():
 # --- Backtrader Integration (RSI + Gold Divergence Logic) ---
 import backtrader as bt
 from datetime import datetime
+Re-trigger deploy after enabling API
 
 class TLCITStrategy(bt.Strategy):
     def __init__(self):
