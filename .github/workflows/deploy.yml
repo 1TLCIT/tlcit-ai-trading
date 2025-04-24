@@ -31,5 +31,5 @@ jobs:
           gcloud run deploy tlcit-engine \
             --image gcr.io/tlcit-engine/tlcit-engine \
             --platform managed \
-            --region us-central1 \
+            --region us-central1 \ 
             --allow-unauthenticated
