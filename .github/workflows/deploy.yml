@@ -2,32 +2,33 @@ name: Deploy to Google Cloud Run
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
-        export_default_credentials: true
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: Build & Push Docker Image
-      run: |
-        gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/tlcit-engine
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Deploy to Cloud Run
-      run: |
-        gcloud run deploy tlcit-engine \
-          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/tlcit-engine \
-          --platform managed \
-          --region us-central1 \
-          --allow-unauthenticated
+      - name: Build & Push Docker Image
+        run: |
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/tlcit-engine
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy tlcit-engine \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/tlcit-engine \
+            --platform managed \
+            --region us-central1 \
+            --allow-unauthenticated
