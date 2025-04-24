@@ -24,12 +24,13 @@ jobs:
 
       - name: Build & Push Docker Image
         run: |
-          gcloud builds submit --tag gcr.io/tlcit-engine/tlcit-engine
+          gcloud builds submit . --tag gcr.io/tlcit-engine/tlcit-engine
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy tlcit-engine \
             --image gcr.io/tlcit-engine/tlcit-engine \
             --platform managed \
-            --region us-central1 \ 
+            --region us-central1 \
             --allow-unauthenticated
+
