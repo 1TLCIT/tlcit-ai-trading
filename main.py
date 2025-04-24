@@ -1,6 +1,6 @@
 # TLCIT Engine: Dual Integration Build (FastAPI + QuantConnect + Backtrader + Alerts + Storage + Google Chat)
 # 🔁 Re-trigger deploy after enabling Cloud Resource Manager API
-
+# Trigger deploy now
 # --- FastAPI Core ---
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
