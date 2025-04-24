@@ -1,4 +1,4 @@
-🚀 Re-trigger deploy after fixing requirements
+# ✅ Re-trigger deploy after fixing requirements.txt and YAML syntax
 name: Deploy to Google Cloud Run
 
 on:
@@ -34,4 +34,3 @@ jobs:
             --platform managed \
             --region us-central1 \
             --allow-unauthenticated
-
