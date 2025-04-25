@@ -36,6 +36,7 @@ CHAT_WEBHOOK_URL = os.getenv("GOOGLE_CHAT_WEBHOOK")
 def send_google_chat_message(message: str):
     if CHAT_WEBHOOK_URL:
         requests.post(CHAT_WEBHOOK_URL, json={"text": message})
+
 # Gold Price Scraper
 def get_live_gold_price():
     try:
@@ -93,10 +94,8 @@ def sell_stock(req: SignalRequest):
 @app.get("/portfolio")
 def get_portfolio():
     return portfolio
-    if __name__ == "__main__":
+
+# --- Entry Point for Local Run or Cloud Run ---
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8080)
-
-
-
-
