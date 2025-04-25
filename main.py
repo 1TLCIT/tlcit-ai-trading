@@ -1,125 +1,99 @@
-# TLCIT Engine: Dual Integration Build (FastAPI + QuantConnect + Backtrader + Alerts + Storage + Google Chat)
-
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from typing import Literal, Optional
-import datetime
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import os
+import datetime
 import requests
 import yfinance as yf
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Literal, Field
+import google.auth.transport.requests
+import google.oauth2.id_token
 
 app = FastAPI()
 
-# --- Google Sheets Setup (safe fallback if credentials missing) ---
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
+# --- Security: only allow calls with a valid OIDC token ---
+bearer = HTTPBearer(auto_error=False)
 
-SHEETS_CREDS_PATH = "/secrets/gcloud_credentials.json"
+def verify_token(creds: HTTPAuthorizationCredentials = Depends(bearer)):
+    if creds is None:
+        raise HTTPException(status_code=401, detail="Authorization required")
+    audience = os.environ.get("OIDC_AUDIENCE")
+    request = google.auth.transport.requests.Request()
+    try:
+        google.oauth2.id_token.verify_token(creds.credentials, request, audience=audience)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return True
 
-try:
-    credentials = ServiceAccountCredentials.from_json_keyfile_name(
-        SHEETS_CREDS_PATH, scope
-    )
-    gs_client = gspread.authorize(credentials)
-    sheet = gs_client.open("TLCIT_Portfolio").sheet1
-except Exception as e:
-    print("⚠️ Google Sheets not initialized:", e)
-    sheet = None
-
-# --- Data Models ---
-class SignalRequest(BaseModel):
-    ticker: str
-    timeframe: Literal["daily", "weekly", "hourly"]
-    trigger: str
-    quantity: Optional[float] = 0.0
-
-# --- Simulated Portfolio (in-memory) ---
-portfolio = {}
-
-# --- Google Chat Alert Integration ---
+# --- Google Chat webhook for alerts ---
 CHAT_WEBHOOK_URL = os.getenv("GOOGLE_CHAT_WEBHOOK")
-
-def send_google_chat_message(message: str):
+def send_google_chat(message: str):
     if CHAT_WEBHOOK_URL:
         requests.post(CHAT_WEBHOOK_URL, json={"text": message})
 
-# --- Gold Price Scraper ---
-def get_live_gold_price():
-    try:
-        gold_data = yf.download("GC=F", period="1d", interval="1m")
-        if not gold_data.empty:
-            return gold_data["Close"].iloc[-1]
-    except Exception as e:
-        print("Error fetching gold price:", e)
-    return 0
+# --- Request model ---
+class SignalRequest(BaseModel):
+    ticker: str = Field(..., description="Ticker symbol")
+    timeframe: Literal["daily", "weekly", "hourly"] = "daily"
+    trigger: str
+    quantity: float = 0.0
 
-# --- API Routes ---
-@app.get("/")
-def read_root():
-    return {"message": "TLCIT is live 🚀"}
+# --- In-memory portfolio (replace with a real DB if you like) ---
+portfolio = {}
 
-@app.get("/score")
-def get_score():
-    return {
-        "ticker": "NEM",
-        "conviction_score": 9.8,
-        "reason": "Post-earnings momentum, gold divergence, TLCIT v9.8 global signal"
-    }
+# --- Health check ---
+@app.get("/", tags=["health"])
+async def health():
+    return {"status": "OK"}
 
-@app.post("/signal")
-def generate_signal(req: SignalRequest):
-    ticker = req.ticker.upper()
-    trigger = req.trigger.lower()
-    if ticker == "NEM" and trigger == "breakout":
-        msg = f"📈 TLCIT Signal: BUY {ticker} on {trigger.upper()} trigger"
-        send_google_chat_message(msg)
-        return {
-            "action": "BUY",
-            "conviction": 9.8,
-            "reason": "Breakout + gold correlation + earnings beat"
-        }
-    return {"action": "HOLD", "reason": "No current signal"}
+# --- Manual endpoints (protected) ---
+@app.get("/score", dependencies=[Depends(verify_token)], tags=["signals"])
+async def get_score():
+    return {"ticker": "NEM", "conviction_score": 9.8, "reason": "Post-earnings momentum"}
 
-@app.post("/buy")
-def buy_stock(req: SignalRequest):
-    portfolio[req.ticker.upper()] = portfolio.get(req.ticker.upper(), 0) + req.quantity
-    if sheet:
-        sheet.append_row([
-            datetime.datetime.now().isoformat(),
-            req.ticker.upper(),
-            "BUY",
-            req.quantity
-        ])
-    msg = f"✅ TRADE EXECUTED: Bought {req.quantity} of {req.ticker.upper()}"
-    send_google_chat_message(msg)
+@app.post("/signal", dependencies=[Depends(verify_token)], tags=["signals"])
+async def generate_signal(req: SignalRequest):
+    t = req.ticker.upper()
+    if t == "NEM" and req.trigger.lower() == "breakout":
+        send_google_chat(f"📈 TLCIT Signal: BUY {t}")
+        return {"action": "BUY", "conviction": 9.8, "reason": "Breakout + gold correlation"}
+    return {"action": "HOLD", "reason": "No signal"}
+
+@app.post("/buy", dependencies=[Depends(verify_token)], tags=["trades"])
+async def buy_stock(req: SignalRequest):
+    s = req.ticker.upper()
+    portfolio[s] = portfolio.get(s, 0) + req.quantity
+    send_google_chat(f"✅ TRADE EXECUTED: Bought {req.quantity} of {s}")
     return {"status": "success", "portfolio": portfolio}
 
-@app.post("/sell")
-def sell_stock(req: SignalRequest):
-    ticker = req.ticker.upper()
-    if ticker in portfolio:
-        portfolio[ticker] = max(0, portfolio[ticker] - req.quantity)
-        if sheet:
-            sheet.append_row([
-                datetime.datetime.now().isoformat(),
-                ticker,
-                "SELL",
-                req.quantity
-            ])
-    msg = f"🔻 TRADE EXECUTED: Sold {req.quantity} of {ticker}"
-    send_google_chat_message(msg)
+@app.post("/sell", dependencies=[Depends(verify_token)], tags=["trades"])
+async def sell_stock(req: SignalRequest):
+    s = req.ticker.upper()
+    portfolio[s] = max(0, portfolio.get(s, 0) - req.quantity)
+    send_google_chat(f"🔻 TRADE EXECUTED: Sold {req.quantity} of {s}")
     return {"status": "success", "portfolio": portfolio}
 
-@app.get("/portfolio")
-def get_portfolio():
-    return portfolio
+# --- Step 4: Automated scan endpoint (/scan) ---
+@app.post("/scan", dependencies=[Depends(verify_token)], tags=["automation"])
+async def scan_all():
+    # Read tickers from env var, default to just NEM
+    tickers = os.getenv("TICKERS", "NEM").split(",")
+    summary = {}
+    for t in tickers:
+        t = t.strip()
+        req = SignalRequest(ticker=t, timeframe="daily", trigger="breakout", quantity=1)
+        res = await generate_signal(req)
+        if res.get("action") == "BUY":
+            await buy_stock(req)
+            summary[t] = "bought"
+        else:
+            summary[t] = res.get("action")
+    return {"scanned": summary}
 
-# --- Entry Point for Local Run or Cloud Run ---
+# --- Uvicorn entrypoint ---
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.getenv("PORT", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port)
+
+
+
