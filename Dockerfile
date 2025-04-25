@@ -1,17 +1,17 @@
-# Use the official Python image
+# Use official Python image
 FROM python:3.10
 
-# Set the working directory
+# Set working directory
 WORKDIR /app
 
-# Copy all files
+# Copy everything
 COPY . .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose FastAPI default port
+# Expose port 8080 for Cloud Run
 EXPOSE 8080
 
-# Run the FastAPI app
+# Start FastAPI app using uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
