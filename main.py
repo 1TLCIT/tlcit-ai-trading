@@ -13,10 +13,17 @@ import yfinance as yf
 app = FastAPI()
 
 # --- Google Sheets Setup (safe fallback if credentials missing) ---
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+SHEETS_CREDS_PATH = "/secrets/gcloud_credentials.json"
 
 try:
-    credentials = ServiceAccountCredentials.from_json_keyfile_name("gcloud_credentials.json", scope)
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(
+        SHEETS_CREDS_PATH, scope
+    )
     gs_client = gspread.authorize(credentials)
     sheet = gs_client.open("TLCIT_Portfolio").sheet1
 except Exception as e:
@@ -81,7 +88,12 @@ def generate_signal(req: SignalRequest):
 def buy_stock(req: SignalRequest):
     portfolio[req.ticker.upper()] = portfolio.get(req.ticker.upper(), 0) + req.quantity
     if sheet:
-        sheet.append_row([datetime.datetime.now().isoformat(), req.ticker.upper(), "BUY", req.quantity])
+        sheet.append_row([
+            datetime.datetime.now().isoformat(),
+            req.ticker.upper(),
+            "BUY",
+            req.quantity
+        ])
     msg = f"✅ TRADE EXECUTED: Bought {req.quantity} of {req.ticker.upper()}"
     send_google_chat_message(msg)
     return {"status": "success", "portfolio": portfolio}
@@ -92,7 +104,12 @@ def sell_stock(req: SignalRequest):
     if ticker in portfolio:
         portfolio[ticker] = max(0, portfolio[ticker] - req.quantity)
         if sheet:
-            sheet.append_row([datetime.datetime.now().isoformat(), ticker, "SELL", req.quantity])
+            sheet.append_row([
+                datetime.datetime.now().isoformat(),
+                ticker,
+                "SELL",
+                req.quantity
+            ])
     msg = f"🔻 TRADE EXECUTED: Sold {req.quantity} of {ticker}"
     send_google_chat_message(msg)
     return {"status": "success", "portfolio": portfolio}
@@ -104,4 +121,5 @@ def get_portfolio():
 # --- Entry Point for Local Run or Cloud Run ---
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
