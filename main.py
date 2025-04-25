@@ -1,7 +1,5 @@
 # TLCIT Engine: Dual Integration Build (FastAPI + QuantConnect + Backtrader + Alerts + Storage + Google Chat)
-# Trigger deploy now
 
-# --- FastAPI Core ---
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from typing import Literal, Optional
@@ -14,30 +12,35 @@ import yfinance as yf
 
 app = FastAPI()
 
-# Google Sheets Setup (for live portfolio storage)
+# --- Google Sheets Setup (safe fallback if credentials missing) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = ServiceAccountCredentials.from_json_keyfile_name("gcloud_credentials.json", scope)
-gs_client = gspread.authorize(credentials)
-sheet = gs_client.open("TLCIT_Portfolio").sheet1
 
-# Signal Request Model
+try:
+    credentials = ServiceAccountCredentials.from_json_keyfile_name("gcloud_credentials.json", scope)
+    gs_client = gspread.authorize(credentials)
+    sheet = gs_client.open("TLCIT_Portfolio").sheet1
+except Exception as e:
+    print("⚠️ Google Sheets not initialized:", e)
+    sheet = None
+
+# --- Data Models ---
 class SignalRequest(BaseModel):
     ticker: str
     timeframe: Literal["daily", "weekly", "hourly"]
     trigger: str
     quantity: Optional[float] = 0.0
 
-# Simulated Portfolio (In-Memory)
+# --- Simulated Portfolio (in-memory) ---
 portfolio = {}
 
-# Google Chat Webhook (set this in your environment or secrets manager)
+# --- Google Chat Alert Integration ---
 CHAT_WEBHOOK_URL = os.getenv("GOOGLE_CHAT_WEBHOOK")
 
 def send_google_chat_message(message: str):
     if CHAT_WEBHOOK_URL:
         requests.post(CHAT_WEBHOOK_URL, json={"text": message})
 
-# Gold Price Scraper
+# --- Gold Price Scraper ---
 def get_live_gold_price():
     try:
         gold_data = yf.download("GC=F", period="1d", interval="1m")
@@ -47,6 +50,7 @@ def get_live_gold_price():
         print("Error fetching gold price:", e)
     return 0
 
+# --- API Routes ---
 @app.get("/")
 def read_root():
     return {"message": "TLCIT is live 🚀"}
@@ -76,7 +80,8 @@ def generate_signal(req: SignalRequest):
 @app.post("/buy")
 def buy_stock(req: SignalRequest):
     portfolio[req.ticker.upper()] = portfolio.get(req.ticker.upper(), 0) + req.quantity
-    sheet.append_row([datetime.datetime.now().isoformat(), req.ticker.upper(), "BUY", req.quantity])
+    if sheet:
+        sheet.append_row([datetime.datetime.now().isoformat(), req.ticker.upper(), "BUY", req.quantity])
     msg = f"✅ TRADE EXECUTED: Bought {req.quantity} of {req.ticker.upper()}"
     send_google_chat_message(msg)
     return {"status": "success", "portfolio": portfolio}
@@ -86,7 +91,8 @@ def sell_stock(req: SignalRequest):
     ticker = req.ticker.upper()
     if ticker in portfolio:
         portfolio[ticker] = max(0, portfolio[ticker] - req.quantity)
-        sheet.append_row([datetime.datetime.now().isoformat(), ticker, "SELL", req.quantity])
+        if sheet:
+            sheet.append_row([datetime.datetime.now().isoformat(), ticker, "SELL", req.quantity])
     msg = f"🔻 TRADE EXECUTED: Sold {req.quantity} of {ticker}"
     send_google_chat_message(msg)
     return {"status": "success", "portfolio": portfolio}
